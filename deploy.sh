@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Скрипт автоматического деплоя (Интерактивный + SSL)
+# Скрипт автоматического деплоя (Интерактивный + SSL на любом порту)
 
 # 1. Определяем пути
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,9 +8,9 @@ CURRENT_USER=$(whoami)
 CURRENT_GROUP=$(id -gn)
 
 echo "--- Настройка параметров деплоя ---"
-read -p "Введите домен сервера (ОБЯЗАТЕЛЬНО для SSL, напр. sub.example.com): " SERVER_DOMAIN
-read -p "Введите порт для Nginx (по умолчанию 80): " SERVER_PORT
-SERVER_PORT=${SERVER_PORT:-80}
+read -p "Введите домен сервера (напр. sub.example.com): " SERVER_DOMAIN
+read -p "Введите порт для этого приложения (напр. 5090): " SERVER_PORT
+SERVER_PORT=${SERVER_PORT:-5090}
 
 echo "--- Starting Deployment as $CURRENT_USER ---"
 echo "Project directory: $PROJECT_DIR"
@@ -74,8 +74,45 @@ sudo cp vpn-aggregator.socket /etc/systemd/system/
 sudo cp vpn-aggregator.service /etc/systemd/system/
 rm vpn-aggregator.socket vpn-aggregator.service
 
-# 6. Настройка Nginx
+# 6. Получение SSL сертификата (если указан домен)
+# Используем certonly, чтобы не менять конфиги Nginx автоматически
+PROTOCOL="http"
+if [[ "$SERVER_DOMAIN" == *"."* ]]; then
+    echo "Attempting to get/renew SSL certificate for $SERVER_DOMAIN..."
+    # Пытаемся получить сертификат. Если на 80 порту уже есть сайт, Certbot через --nginx сам разберется
+    sudo certbot certonly --nginx -d "$SERVER_DOMAIN" --non-interactive --agree-tos -m "admin@$SERVER_DOMAIN"
+    
+    if [ -f "/etc/letsencrypt/live/$SERVER_DOMAIN/fullchain.pem" ]; then
+        PROTOCOL="https"
+        echo "SSL Certificate found/obtained!"
+    else
+        echo "SSL Certificate NOT obtained. Falling back to HTTP."
+    fi
+fi
+
+# 7. Настройка Nginx
 echo "Configuring Nginx..."
+if [ "$PROTOCOL" == "https" ]; then
+cat <<EOF > vpn-aggregator.conf
+server {
+    listen $SERVER_PORT ssl;
+    server_name $SERVER_DOMAIN;
+
+    ssl_certificate /etc/letsencrypt/live/$SERVER_DOMAIN/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$SERVER_DOMAIN/privkey.pem;
+
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location /static/ {
+        alias $PROJECT_DIR/static/;
+    }
+
+    location / {
+        include proxy_params;
+        proxy_pass http://unix:/run/vpn-aggregator.sock;
+    }
+}
+EOF
+else
 cat <<EOF > vpn-aggregator.conf
 server {
     listen $SERVER_PORT;
@@ -92,22 +129,10 @@ server {
     }
 }
 EOF
+fi
 
 sudo mv vpn-aggregator.conf /etc/nginx/sites-available/
 sudo ln -sf /etc/nginx/sites-available/vpn-aggregator.conf /etc/nginx/sites-enabled/
-if [ "$SERVER_PORT" == "80" ]; then
-    sudo rm -f /etc/nginx/sites-enabled/default
-fi
-
-# 7. Получение SSL сертификата (только если порт 80 и указан домен)
-PROTOCOL="http"
-if [ "$SERVER_PORT" == "80" ] && [[ "$SERVER_DOMAIN" == *"."* ]]; then
-    echo "Attempting to get SSL certificate for $SERVER_DOMAIN..."
-    sudo certbot --nginx -d "$SERVER_DOMAIN" --non-interactive --agree-tos -m "admin@$SERVER_DOMAIN"
-    if [ $? -eq 0 ]; then
-        PROTOCOL="https"
-    fi
-fi
 
 # 8. Перезапуск всего
 echo "Restarting services..."
@@ -133,15 +158,10 @@ else:
     User.objects.create_superuser('$ADMIN_USER', 'admin@example.com', '$ADMIN_PASS')
 EOF
 
-PORT_STR=""
-if [ "$PROTOCOL" == "http" ] && [ "$SERVER_PORT" != "80" ]; then
-    PORT_STR=":$SERVER_PORT"
-fi
-
 echo -e "\n\e[1;32m--- Deployment Finished Successfully ---\e[0m"
 echo -e "\e[1;34mПанель управления доступна по адресу:\e[0m"
-echo -e "URL: \e[1;36m$PROTOCOL://$SERVER_DOMAIN$PORT_STR\e[0m"
-echo -e "Админка: \e[1;36m$PROTOCOL://$SERVER_DOMAIN$PORT_STR/dashboard/\e[0m"
+echo -e "URL: \e[1;36m$PROTOCOL://$SERVER_DOMAIN:$SERVER_PORT\e[0m"
+echo -e "Админка: \e[1;36m$PROTOCOL://$SERVER_DOMAIN:$SERVER_PORT/dashboard/\e[0m"
 echo -e "\n\e[1;33mДанные для входа:\e[0m"
 echo -e "Логин:  \e[1;32m$ADMIN_USER\e[0m"
 echo -e "Пароль: \e[1;32m$ADMIN_PASS\e[0m"
