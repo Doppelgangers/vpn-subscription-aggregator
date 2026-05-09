@@ -2,6 +2,7 @@ import base64
 import requests
 import logging
 import urllib3
+from urllib.parse import quote
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse
 from django.contrib.auth.decorators import login_required
@@ -74,14 +75,13 @@ def aggregate_sub_view(request, token):
     sub_display_name = agg_sub.client_title or agg_sub.name
 
     # Добавляем название подписки для приложений (v2rayTun и др)
-    # Хитрость: кодируем в utf-8 и декодируем в iso-8859-1, чтобы обмануть Django 
-    # и заставить его отправить "сырые" байты utf-8. Это нужно для корректного отображения кириллицы в приложениях.
-    safe_name = sub_display_name.encode('utf-8').decode('iso-8859-1')
+    # Используем URL-кодирование (percent-encoding). Это стандартный способ передачи кириллицы в заголовках.
+    safe_name_quoted = quote(sub_display_name)
     
-    response['profile-title'] = safe_name
+    response['profile-title'] = safe_name_quoted
     
-    # Дополнительный заголовок для совместимости
-    response['Content-Disposition'] = f'attachment; filename="{safe_name}.txt"'
+    # RFC 6266 заголовок для корректной передачи имени файла с кириллицей
+    response['Content-Disposition'] = f"attachment; filename*=UTF-8''{safe_name_quoted}.txt"
     
     # Добавляем информацию о трафике (суммарную)
     # total=0 означает безлимит в большинстве клиентов
