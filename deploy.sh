@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Скрипт автоматического деплоя (Интерактивный)
+# Скрипт автоматического деплоя (Интерактивный + SSL)
 
 # 1. Определяем пути
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,7 +8,7 @@ CURRENT_USER=$(whoami)
 CURRENT_GROUP=$(id -gn)
 
 echo "--- Настройка параметров деплоя ---"
-read -p "Введите домен или IP сервера (например, example.com или 1.2.3.4): " SERVER_DOMAIN
+read -p "Введите домен сервера (ОБЯЗАТЕЛЬНО для SSL, напр. sub.example.com): " SERVER_DOMAIN
 read -p "Введите порт для Nginx (по умолчанию 80): " SERVER_PORT
 SERVER_PORT=${SERVER_PORT:-80}
 
@@ -20,7 +20,7 @@ echo "Port: $SERVER_PORT"
 # 2. Установка системных зависимостей
 echo "Installing system dependencies..."
 sudo apt-get update
-sudo apt-get install -y python3-pip python3-venv nginx curl
+sudo apt-get install -y python3-pip python3-venv nginx curl certbot python3-certbot-nginx
 
 # 3. Настройка виртуального окружения
 cd "$PROJECT_DIR"
@@ -95,12 +95,21 @@ EOF
 
 sudo mv vpn-aggregator.conf /etc/nginx/sites-available/
 sudo ln -sf /etc/nginx/sites-available/vpn-aggregator.conf /etc/nginx/sites-enabled/
-# Удаляем дефолтный конфиг только если мы на 80 порту
 if [ "$SERVER_PORT" == "80" ]; then
     sudo rm -f /etc/nginx/sites-enabled/default
 fi
 
-# 7. Перезапуск всего
+# 7. Получение SSL сертификата (только если порт 80 и указан домен)
+PROTOCOL="http"
+if [ "$SERVER_PORT" == "80" ] && [[ "$SERVER_DOMAIN" == *"."* ]]; then
+    echo "Attempting to get SSL certificate for $SERVER_DOMAIN..."
+    sudo certbot --nginx -d "$SERVER_DOMAIN" --non-interactive --agree-tos -m "admin@$SERVER_DOMAIN"
+    if [ $? -eq 0 ]; then
+        PROTOCOL="https"
+    fi
+fi
+
+# 8. Перезапуск всего
 echo "Restarting services..."
 sudo systemctl daemon-reload
 sudo systemctl enable --now vpn-aggregator.socket
@@ -108,7 +117,7 @@ sudo systemctl restart vpn-aggregator.service
 
 sudo nginx -t && sudo systemctl restart nginx
 
-# 8. Создание/Обновление админа и вывод информации
+# 9. Создание/Обновление админа и вывод информации
 ADMIN_USER="admin"
 ADMIN_PASS=$(openssl rand -base64 12)
 
@@ -124,10 +133,15 @@ else:
     User.objects.create_superuser('$ADMIN_USER', 'admin@example.com', '$ADMIN_PASS')
 EOF
 
+PORT_STR=""
+if [ "$PROTOCOL" == "http" ] && [ "$SERVER_PORT" != "80" ]; then
+    PORT_STR=":$SERVER_PORT"
+fi
+
 echo -e "\n\e[1;32m--- Deployment Finished Successfully ---\e[0m"
 echo -e "\e[1;34mПанель управления доступна по адресу:\e[0m"
-echo -e "URL: \e[1;36mhttp://$SERVER_DOMAIN:$SERVER_PORT\e[0m"
-echo -e "Админка: \e[1;36mhttp://$SERVER_DOMAIN:$SERVER_PORT/dashboard/\e[0m"
+echo -e "URL: \e[1;36m$PROTOCOL://$SERVER_DOMAIN$PORT_STR\e[0m"
+echo -e "Админка: \e[1;36m$PROTOCOL://$SERVER_DOMAIN$PORT_STR/dashboard/\e[0m"
 echo -e "\n\e[1;33mДанные для входа:\e[0m"
 echo -e "Логин:  \e[1;32m$ADMIN_USER\e[0m"
 echo -e "Пароль: \e[1;32m$ADMIN_PASS\e[0m"

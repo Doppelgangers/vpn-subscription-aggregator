@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 def aggregate_sub_view(request, token):
     agg_sub = get_object_or_404(AggregateSubscription, token=token)
     all_configs = []
+    total_upload = 0
+    total_download = 0
     
     active_links = agg_sub.links.filter(is_active=True)
     
@@ -24,6 +26,16 @@ def aggregate_sub_view(request, token):
             # Reduced timeout to 3s to keep the hub responsive when a node is down
             response = requests.get(source.url, timeout=3, verify=False)
             if response.status_code == 200:
+                # Читаем заголовки трафика от 3x-ui если они есть
+                sub_info = response.headers.get('Subscription-Userinfo', '')
+                if sub_info:
+                    try:
+                        # Формат: upload=...; download=...; total=...; expire=...
+                        info_parts = dict(item.split('=') for item in sub_info.split('; ') if '=' in item)
+                        total_upload += int(info_parts.get('upload', 0))
+                        total_download += int(info_parts.get('download', 0))
+                    except: pass
+
                 raw_text = response.text.strip()
                 if not raw_text:
                     continue
@@ -56,7 +68,16 @@ def aggregate_sub_view(request, token):
     final_content = "\n".join(all_configs)
     encoded_content = base64.b64encode(final_content.encode('utf-8')).decode('utf-8')
     
-    return HttpResponse(encoded_content, content_type="text/plain; charset=utf-8")
+    response = HttpResponse(encoded_content, content_type="text/plain; charset=utf-8")
+    
+    # Добавляем название подписки для приложений (v2rayTun и др)
+    response['profile-title'] = base64.b64encode(agg_sub.name.encode('utf-8')).decode('utf-8')
+    
+    # Добавляем информацию о трафике (суммарную)
+    # total=0 означает безлимит в большинстве клиентов
+    response['Subscription-Userinfo'] = f"upload={total_upload}; download={total_download}; total=0; expire=0"
+    
+    return response
 
 @login_required
 def dashboard(request):
