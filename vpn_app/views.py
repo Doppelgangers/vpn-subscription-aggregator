@@ -75,12 +75,13 @@ def aggregate_sub_view(request, token):
     sub_display_name = agg_sub.client_title or agg_sub.name
 
     # Добавляем название подписки для приложений (v2rayTun и др)
-    # Используем URL-кодирование (percent-encoding). Это стандартный способ передачи кириллицы в заголовках.
-    safe_name_quoted = quote(sub_display_name)
-    
-    response['profile-title'] = safe_name_quoted
+    # Используем префикс base64:, который понимают многие современные клиенты (v2rayNG, Shadowrocket и др)
+    # Это позволяет передавать кириллицу без искажений.
+    name_b64 = base64.b64encode(sub_display_name.encode('utf-8')).decode('utf-8')
+    response['profile-title'] = f"base64:{name_b64}"
     
     # RFC 6266 заголовок для корректной передачи имени файла с кириллицей
+    safe_name_quoted = quote(sub_display_name)
     response['Content-Disposition'] = f"attachment; filename*=UTF-8''{safe_name_quoted}.txt"
     
     # Добавляем информацию о трафике (суммарную)
