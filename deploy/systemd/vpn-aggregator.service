@@ -1,0 +1,17 @@
+[Unit]
+Description=gunicorn daemon
+Requires=vpn-aggregator.socket
+After=network.target
+
+[Service]
+User=www
+Group=www
+WorkingDirectory=/home/www/vpn-subscription-aggregator
+ExecStart=/home/www/vpn-subscription-aggregator/env/bin/gunicorn \
+    --access-logfile - \
+    --workers 3 \
+    --bind unix:/run/vpn-aggregator.sock \
+    config.wsgi:application
+
+[Install]
+WantedBy=multi-user.target

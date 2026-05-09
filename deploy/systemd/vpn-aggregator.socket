@@ -1,0 +1,6 @@
+[Unit]
+Description=gunicorn socket
+[Socket]
+ListenStream=/run/vpn-aggregator.sock
+[Install]
+WantedBy=sockets.target
