@@ -108,5 +108,28 @@ sudo systemctl restart vpn-aggregator.service
 
 sudo nginx -t && sudo systemctl restart nginx
 
-echo "--- Deployment Finished ---"
-echo "Your app should be available at http://$SERVER_DOMAIN:$SERVER_PORT"
+# 8. Создание/Обновление админа и вывод информации
+ADMIN_USER="admin"
+ADMIN_PASS=$(openssl rand -base64 12)
+
+echo "Setting up admin user..."
+source env/bin/activate
+python manage.py shell <<EOF
+from django.contrib.auth.models import User
+if User.objects.filter(username='$ADMIN_USER').exists():
+    user = User.objects.get(username='$ADMIN_USER')
+    user.set_password('$ADMIN_PASS')
+    user.save()
+else:
+    User.objects.create_superuser('$ADMIN_USER', 'admin@example.com', '$ADMIN_PASS')
+EOF
+
+echo -e "\n\e[1;32m--- Deployment Finished Successfully ---\e[0m"
+echo -e "\e[1;34mПанель управления доступна по адресу:\e[0m"
+echo -e "URL: \e[1;36mhttp://$SERVER_DOMAIN:$SERVER_PORT\e[0m"
+echo -e "Админка: \e[1;36mhttp://$SERVER_DOMAIN:$SERVER_PORT/dashboard/\e[0m"
+echo -e "\n\e[1;33mДанные для входа:\e[0m"
+echo -e "Логин:  \e[1;32m$ADMIN_USER\e[0m"
+echo -e "Пароль: \e[1;32m$ADMIN_PASS\e[0m"
+echo -e "\n\e[1;31mВНИМАНИЕ:\e[0m Обязательно сохраните эти данные!"
+echo -e "----------------------------------------"
