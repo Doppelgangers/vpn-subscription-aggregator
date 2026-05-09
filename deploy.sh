@@ -1,17 +1,23 @@
 #!/bin/bash
 
-# Скрипт автоматического деплоя (Улучшенный)
-# Автоматически определяет пути и устанавливает зависимости
+# Скрипт автоматического деплоя (Интерактивный)
 
 # 1. Определяем пути
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CURRENT_USER=$(whoami)
 CURRENT_GROUP=$(id -gn)
 
+echo "--- Настройка параметров деплоя ---"
+read -p "Введите домен или IP сервера (например, example.com или 1.2.3.4): " SERVER_DOMAIN
+read -p "Введите порт для Nginx (по умолчанию 80): " SERVER_PORT
+SERVER_PORT=${SERVER_PORT:-80}
+
 echo "--- Starting Deployment as $CURRENT_USER ---"
 echo "Project directory: $PROJECT_DIR"
+echo "Domain: $SERVER_DOMAIN"
+echo "Port: $SERVER_PORT"
 
-# 2. Установка системных зависимостей (Debian/Ubuntu)
+# 2. Установка системных зависимостей
 echo "Installing system dependencies..."
 sudo apt-get update
 sudo apt-get install -y python3-pip python3-venv nginx curl
@@ -33,9 +39,8 @@ echo "Applying migrations and collecting static..."
 python manage.py migrate
 python manage.py collectstatic --noinput
 
-# 5. Генерация и копирование systemd файлов (с подстановкой путей)
+# 5. Конфигурация systemd
 echo "Configuring systemd..."
-# Создаем временные файлы с правильными путями
 cat <<EOF > vpn-aggregator.socket
 [Unit]
 Description=gunicorn socket
@@ -73,8 +78,8 @@ rm vpn-aggregator.socket vpn-aggregator.service
 echo "Configuring Nginx..."
 cat <<EOF > vpn-aggregator.conf
 server {
-    listen 80;
-    server_name _; # Принимает запросы по любому IP/домену
+    listen $SERVER_PORT;
+    server_name $SERVER_DOMAIN;
 
     location = /favicon.ico { access_log off; log_not_found off; }
     location /static/ {
@@ -90,7 +95,10 @@ EOF
 
 sudo mv vpn-aggregator.conf /etc/nginx/sites-available/
 sudo ln -sf /etc/nginx/sites-available/vpn-aggregator.conf /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default
+# Удаляем дефолтный конфиг только если мы на 80 порту
+if [ "$SERVER_PORT" == "80" ]; then
+    sudo rm -f /etc/nginx/sites-enabled/default
+fi
 
 # 7. Перезапуск всего
 echo "Restarting services..."
@@ -101,4 +109,4 @@ sudo systemctl restart vpn-aggregator.service
 sudo nginx -t && sudo systemctl restart nginx
 
 echo "--- Deployment Finished ---"
-echo "Your app should be available at http://$(curl -s https://ifconfig.me) or http://your-server-ip"
+echo "Your app should be available at http://$SERVER_DOMAIN:$SERVER_PORT"
