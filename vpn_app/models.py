@@ -2,7 +2,8 @@ import uuid
 from django.db import models
 
 class AggregateSubscription(models.Model):
-    name = models.CharField("Название", max_length=100, default="My Multi-Node Sub")
+    name = models.CharField("Название (внутреннее)", max_length=100, default="My Multi-Node Sub")
+    client_title = models.CharField("Название (для клиента)", max_length=100, blank=True, help_text="То, что увидит пользователь в приложении")
     token = models.CharField("Токен подписки", max_length=64, default=uuid.uuid4, unique=True)
     custom_base_url = models.CharField("Кастомный домен/URL", max_length=255, blank=True, help_text="Напр.: subses.doppelgangeres.com:5090")
     created_at = models.DateTimeField(auto_now_add=True)
