@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}VPN Hub{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .card { border-radius: 0.75rem; background: white; box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1); }
+    </style>
+</head>
+<body class="min-h-screen">
+    <nav class="bg-slate-800 text-white py-4 px-6 mb-8">
+        <div class="max-w-6xl mx-auto flex justify-between items-center">
+            <a href="{% url 'index' %}" class="flex items-center gap-2 font-bold text-xl">
+                <i data-lucide="shield-check" class="text-blue-500"></i>
+                VPN Hub
+            </a>
+            <div class="flex items-center gap-6">
+                {% if user.is_authenticated %}
+                    <a href="{% url 'dashboard' %}" class="hover:text-blue-400 transition">Дашборд</a>
+                    <form action="{% url 'logout' %}" method="post" class="inline">
+                        {% csrf_token %}
+                        <button type="submit" class="hover:text-red-400 transition">Выйти</button>
+                    </form>
+                {% else %}
+                    <a href="{% url 'login' %}" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition">Войти</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-6xl mx-auto px-6 pb-12">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Global Toast -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-800 text-white px-6 py-3 rounded-xl shadow-2xl transform translate-y-20 opacity-0 transition-all duration-300 flex items-center gap-3 z-50">
+        <i data-lucide="check-circle" class="text-green-400 w-5 h-5"></i>
+        <span id="toast-message">Скопировано!</span>
+    </div>
+
+    <!-- Custom Confirmation Modal -->
+    <div id="confirm-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] hidden items-center justify-center p-4">
+        <div class="card max-w-sm w-full p-6 shadow-2xl transform transition-all scale-95 opacity-0" id="modal-content">
+            <div class="flex items-center gap-3 text-red-600 mb-4">
+                <i data-lucide="alert-triangle" class="w-8 h-8"></i>
+                <h3 class="text-xl font-bold">Вы уверены?</h3>
+            </div>
+            <p id="confirm-text" class="text-slate-600 mb-6">Это действие нельзя будет отменить.</p>
+            <div class="flex gap-3">
+                <button onclick="closeConfirmModal()" class="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 font-semibold text-slate-700 hover:bg-slate-50 transition">
+                    Отмена
+                </button>
+                <a id="confirm-button" href="#" class="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white font-semibold text-center hover:bg-red-700 transition shadow-lg shadow-red-100">
+                    Удалить
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            const msgSpan = document.getElementById('toast-message');
+            msgSpan.innerText = message;
+            
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        function confirmAction(url, text = "Вы действительно хотите удалить этот элемент?") {
+            const modal = document.getElementById('confirm-modal');
+            const content = document.getElementById('modal-content');
+            const btn = document.getElementById('confirm-button');
+            const txt = document.getElementById('confirm-text');
+            
+            btn.href = url;
+            txt.innerText = text;
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+            }, 10);
+        }
+
+        function closeConfirmModal() {
+            const modal = document.getElementById('confirm-modal');
+            const content = document.getElementById('modal-content');
+            
+            content.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }, 200);
+        }
+
+        // Show messages from Django
+        {% if messages %}
+            {% for message in messages %}
+                showToast("{{ message }}");
+            {% endfor %}
+        {% endif %}
+    </script>
+</body>
+</html>

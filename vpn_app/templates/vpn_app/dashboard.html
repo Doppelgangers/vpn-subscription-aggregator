@@ -1,0 +1,60 @@
+{% extends 'vpn_app/base.html' %}
+
+{% block title %}Дашборд - VPN Hub{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold text-slate-800">Ваши агрегаторы</h1>
+    <a href="{% url 'create_subscription' %}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition">
+        <i data-lucide="plus-circle" class="w-5 h-5"></i>
+        Создать
+    </a>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    {% for sub in subscriptions %}
+    <div class="card p-6">
+        <div class="flex justify-between items-start mb-4">
+            <div>
+                <h3 class="text-lg font-semibold text-slate-800">{{ sub.name }}</h3>
+                <p class="text-sm text-slate-500">Добавлено: {{ sub.created_at|date:"d.m.Y" }}</p>
+            </div>
+            <div class="flex gap-2">
+                <a href="{% url 'edit_subscription' sub.pk %}" class="text-slate-400 hover:text-blue-600 transition">
+                    <i data-lucide="edit-3" class="w-5 h-5"></i>
+                </a>
+                <button onclick="confirmAction('{% url 'delete_subscription' sub.pk %}', 'Удалить агрегатор «{{ sub.name }}» со всеми ссылками?')" 
+                        class="text-slate-400 hover:text-red-600 transition">
+                    <i data-lucide="trash-2" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4">
+            <p class="text-xs font-mono text-slate-600 break-all select-all">
+                {{ request.scheme }}://{{ request.get_host }}{% url 'aggregate_sub' sub.token %}
+            </p>
+        </div>
+
+        <div class="flex items-center justify-between text-sm text-slate-600">
+            <span class="flex items-center gap-1">
+                <i data-lucide="link" class="w-4 h-4"></i>
+                {{ sub.links.count }} источников
+            </span>
+            <button class="text-blue-600 hover:underline" onclick="copyText('{{ request.scheme }}://{{ request.get_host }}{% url 'aggregate_sub' sub.token %}')">Копировать ссылку</button>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-span-full text-center py-12 text-slate-500">
+        У вас пока нет сводных подписок. Создайте первую!
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+function copyText(text) {
+    navigator.clipboard.writeText(text);
+    showToast('Ссылка скопирована!');
+}
+</script>
+{% endblock %}
