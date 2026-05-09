@@ -71,7 +71,11 @@ def aggregate_sub_view(request, token):
     response = HttpResponse(encoded_content, content_type="text/plain; charset=utf-8")
     
     # Добавляем название подписки для приложений (v2rayTun и др)
-    response['profile-title'] = base64.b64encode(agg_sub.name.encode('utf-8')).decode('utf-8')
+    # Используем прямой текст, так как многие клиенты не декодируют Base64 здесь
+    response['profile-title'] = agg_sub.name
+    
+    # Дополнительный заголовок для совместимости
+    response['Content-Disposition'] = f'attachment; filename="{agg_sub.name}.txt"'
     
     # Добавляем информацию о трафике (суммарную)
     # total=0 означает безлимит в большинстве клиентов
