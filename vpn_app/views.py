@@ -74,11 +74,14 @@ def aggregate_sub_view(request, token):
     sub_display_name = agg_sub.client_title or agg_sub.name
 
     # Добавляем название подписки для приложений (v2rayTun и др)
-    # Используем прямой текст, так как многие клиенты не декодируют Base64 здесь
-    response['profile-title'] = sub_display_name
+    # Хитрость: кодируем в utf-8 и декодируем в iso-8859-1, чтобы обмануть Django 
+    # и заставить его отправить "сырые" байты utf-8. Это нужно для корректного отображения кириллицы в приложениях.
+    safe_name = sub_display_name.encode('utf-8').decode('iso-8859-1')
+    
+    response['profile-title'] = safe_name
     
     # Дополнительный заголовок для совместимости
-    response['Content-Disposition'] = f'attachment; filename="{sub_display_name}.txt"'
+    response['Content-Disposition'] = f'attachment; filename="{safe_name}.txt"'
     
     # Добавляем информацию о трафике (суммарную)
     # total=0 означает безлимит в большинстве клиентов
