@@ -1,42 +1,104 @@
 #!/bin/bash
 
-# Скрипт автоматического деплоя для vpn-subscription-aggregator
-# Предполагается, что проект лежит в /home/www/vpn-subscription-aggregator
+# Скрипт автоматического деплоя (Улучшенный)
+# Автоматически определяет пути и устанавливает зависимости
 
-PROJECT_DIR="/home/www/vpn-subscription-aggregator"
-SYSTEMD_DIR="/etc/systemd/system"
-NGINX_DIR="/etc/nginx/sites-available"
+# 1. Определяем пути
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CURRENT_USER=$(whoami)
+CURRENT_GROUP=$(id -gn)
 
-echo "--- Starting Deployment ---"
+echo "--- Starting Deployment as $CURRENT_USER ---"
+echo "Project directory: $PROJECT_DIR"
 
-# 1. Стягиваем последние изменения (если нужно)
-# git pull origin main
+# 2. Установка системных зависимостей (Debian/Ubuntu)
+echo "Installing system dependencies..."
+sudo apt-get update
+sudo apt-get install -y python3-pip python3-venv nginx curl
 
-# 2. Установка зависимостей
-cd $PROJECT_DIR
+# 3. Настройка виртуального окружения
+cd "$PROJECT_DIR"
+if [ ! -d "env" ]; then
+    echo "Creating virtual environment..."
+    python3 -m venv env
+fi
+
 source env/bin/activate
+pip install --upgrade pip
 pip install -r requirements.txt
+pip install gunicorn
 
-# 3. Миграции и статика
+# 4. Подготовка Django
+echo "Applying migrations and collecting static..."
 python manage.py migrate
 python manage.py collectstatic --noinput
 
-# 4. Копирование systemd файлов
-sudo cp deploy/systemd/vpn-aggregator.socket $SYSTEMD_DIR/
-sudo cp deploy/systemd/vpn-aggregator.service $SYSTEMD_DIR/
+# 5. Генерация и копирование systemd файлов (с подстановкой путей)
+echo "Configuring systemd..."
+# Создаем временные файлы с правильными путями
+cat <<EOF > vpn-aggregator.socket
+[Unit]
+Description=gunicorn socket
+[Socket]
+ListenStream=/run/vpn-aggregator.sock
+[Install]
+WantedBy=sockets.target
+EOF
 
-# 5. Настройка Nginx
-sudo cp deploy/nginx/vpn-aggregator.conf $NGINX_DIR/
-sudo ln -sf $NGINX_DIR/vpn-aggregator.conf /etc/nginx/sites-enabled/
+cat <<EOF > vpn-aggregator.service
+[Unit]
+Description=gunicorn daemon
+Requires=vpn-aggregator.socket
+After=network.target
 
-# 6. Перезапуск сервисов
+[Service]
+User=$CURRENT_USER
+Group=$CURRENT_GROUP
+WorkingDirectory=$PROJECT_DIR
+ExecStart=$PROJECT_DIR/env/bin/gunicorn \\
+    --access-logfile - \\
+    --workers 3 \\
+    --bind unix:/run/vpn-aggregator.sock \\
+    config.wsgi:application
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo cp vpn-aggregator.socket /etc/systemd/system/
+sudo cp vpn-aggregator.service /etc/systemd/system/
+rm vpn-aggregator.socket vpn-aggregator.service
+
+# 6. Настройка Nginx
+echo "Configuring Nginx..."
+cat <<EOF > vpn-aggregator.conf
+server {
+    listen 80;
+    server_name _; # Принимает запросы по любому IP/домену
+
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location /static/ {
+        alias $PROJECT_DIR/static/;
+    }
+
+    location / {
+        include proxy_params;
+        proxy_pass http://unix:/run/vpn-aggregator.sock;
+    }
+}
+EOF
+
+sudo mv vpn-aggregator.conf /etc/nginx/sites-available/
+sudo ln -sf /etc/nginx/sites-available/vpn-aggregator.conf /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+
+# 7. Перезапуск всего
+echo "Restarting services..."
 sudo systemctl daemon-reload
-sudo systemctl start vpn-aggregator.socket
-sudo systemctl enable vpn-aggregator.socket
+sudo systemctl enable --now vpn-aggregator.socket
 sudo systemctl restart vpn-aggregator.service
 
-# 7. Проверка Nginx
 sudo nginx -t && sudo systemctl restart nginx
 
 echo "--- Deployment Finished ---"
-echo "Check status: systemctl status vpn-aggregator.service"
+echo "Your app should be available at http://$(curl -s https://ifconfig.me) or http://your-server-ip"
