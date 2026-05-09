@@ -28,6 +28,11 @@
                             {{ form.token }}
                             <p class="text-[10px] text-slate-400 mt-1">Осторожно: изменение токена обновит ссылку у клиента!</p>
                         </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Кастомный домен</label>
+                            {{ form.custom_base_url }}
+                            <p class="text-[10px] text-slate-400 mt-1">Напр.: domain.com:5090 (оставьте пустым для IP)</p>
+                        </div>
                         <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg transition font-semibold">
                             Сохранить
                         </button>

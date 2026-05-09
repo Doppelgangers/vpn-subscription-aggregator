@@ -32,7 +32,11 @@
 
         <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4">
             <p class="text-xs font-mono text-slate-600 break-all select-all">
-                {{ request.scheme }}://{{ request.get_host }}{% url 'aggregate_sub' sub.token %}
+                {% if sub.custom_base_url %}
+                    {{ request.scheme }}://{{ sub.custom_base_url }}{% url 'aggregate_sub' sub.token %}
+                {% else %}
+                    {{ request.scheme }}://{{ request.get_host }}{% url 'aggregate_sub' sub.token %}
+                {% endif %}
             </p>
         </div>
 
@@ -41,7 +45,7 @@
                 <i data-lucide="link" class="w-4 h-4"></i>
                 {{ sub.links.count }} источников
             </span>
-            <button class="text-blue-600 hover:underline" onclick="copyText('{{ request.scheme }}://{{ request.get_host }}{% url 'aggregate_sub' sub.token %}')">Копировать ссылку</button>
+            <button class="text-blue-600 hover:underline" onclick="copyText('{% if sub.custom_base_url %}{{ request.scheme }}://{{ sub.custom_base_url }}{% url 'aggregate_sub' sub.token %}{% else %}{{ request.scheme }}://{{ request.get_host }}{% url 'aggregate_sub' sub.token %}{% endif %}')">Копировать ссылку</button>
         </div>
     </div>
     {% empty %}
